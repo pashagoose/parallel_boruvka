@@ -1,3 +1,5 @@
+#pragma once
+
 #include <atomic>
 #include <vector>
 
@@ -9,11 +11,13 @@ using std::vector;
 
 class ParallelDsu {
 public:
-	ParallelDsu(size_t n) : 
-		Components(n),
-		Parent(n),
-		ToIdPermutation()
-	{}
+	ParallelDsu(size_t n = 0) : 
+		InitialComponents(n),
+		CurrentComponents(n),
+		Parent(n)
+	{
+		this->ToIdPermutation(n);
+	}
 
 	size_t FindLeader(size_t v) {
 		auto currentParent = Parent[v].load();
@@ -25,16 +29,20 @@ public:
 		return res;
 	}
 
-	void Unite(size_t u, size_t v) {
+	bool Unite(size_t u, size_t v) {
 		size_t uParent = FindLeader(u);
 		size_t vParent = FindLeader(v);
 		if (uParent == vParent) {
-			return;
+			return false;
 		}
 
 		for (;;) {
 			if (Parent[uParent].compare_exchange_weak(uParent, vParent)) {
-				break;
+				if (uParent != vParent) {
+					CurrentComponents.fetch_sub(1);
+					return true;
+				}
+				return false;
 			}
 			std::this_thread::yield();
 			uParent = FindLeader(uParent);
@@ -48,12 +56,19 @@ public:
 		return u == v;
 	}
 
-private:
-	size_t Components = 0;
-	vector<std::atomic<>> Parent;
+	size_t GetComponentsQuantity() const {
+		return CurrentComponents.load();
+	}
 
-	void ToIdPermutation() {
-		for (size_t i = 0; i < Components; ++i) {
+private:
+	size_t InitialComponents = 0;
+	std::atomic<size_t> CurrentComponents = 0;
+	vector<std::atomic<size_t>> Parent;
+
+	void ToIdPermutation(size_t n) {
+		InitialComponents = n;
+		CurrentComponents.store(n);
+		for (size_t i = 0; i < InitialComponents; ++i) {
 			Parent[i].store(i);
 		}
 	}
