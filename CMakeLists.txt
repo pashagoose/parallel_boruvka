@@ -11,7 +11,7 @@ add_compile_options(-Wall -Wextra -pedantic -Werror)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 
-add_subdirectory(is_prime_lib)
+add_subdirectory(boruvka_lib)
 add_subdirectory(tests)
 add_subdirectory(benchmarks)
 
