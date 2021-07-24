@@ -31,15 +31,6 @@ vector<Edge> GenerateTree(size_t n) {
 	return result;
 }
 
-
-int64_t TotalCost(const vector<Edge>& spanningTree) {
-	int64_t result = 0;
-	for (const auto& edge : spanningTree) {
-		result += edge.Cost;
-	}
-	return result;
-}
-
 Edge GenerateRandomEdge(size_t n) {
 	for (;;) {
 		size_t u = RandRange(0, n - 1);
@@ -81,8 +72,7 @@ TEST(BoruvkaCorrectness, TreeOneWorker) {
 		size_t vertices = RandRange(1, 10000);
 		auto edges = GenerateTree(vertices);
 		Boruvka solution(edges, vertices, Workers);
-		auto cost = solution.CalcMST();
-		ASSERT_EQ(cost, TotalCost(edges));
+		solution.CalcMST();
 		auto MST = solution.GetBuiltMST();
 		ASSERT_TRUE(CheckTree(MST, vertices));
 	}
