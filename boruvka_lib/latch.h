@@ -1,5 +1,9 @@
+#pragma once
+
 #include <atomic>
 #include <thread>
+
+namespace BoruvkaMSTAlgorithm {
 
 class Latch {
 public:
@@ -22,3 +26,5 @@ public:
 private:
 	std::atomic<size_t> Counter_{0};
 };
+
+} // namespace BoruvkaMSTAlgorithm
