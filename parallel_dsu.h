@@ -20,11 +20,11 @@ public:
 	}
 
 	size_t FindLeader(size_t v) {
-		auto currentParent_ = Parent_[v].load();
-		if (currentParent_ == v) {
+		auto currentParent = Parent_[v].load();
+		if (currentParent == v) {
 			return v;
 		}
-		auto res = FindLeader(v);
+		auto res = FindLeader(currentParent);
 		Parent_[v].store(res);
 		return res;
 	}

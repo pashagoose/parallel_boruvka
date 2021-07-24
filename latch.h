@@ -3,7 +3,7 @@
 
 class Latch {
 public:
-	
+
 	Latch(size_t n_threads)
 		: Counter_(n_threads)
 	{

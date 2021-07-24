@@ -11,12 +11,13 @@
 #include "parallel_dsu.h"
 #include "thread_safe_vector.h"
 
+
+namespace BoruvkaMSTAlgorithm {
+
 using std::atomic;
 using std::vector;
 using std::pair;
 using std::thread;
-
-namespace BoruvkaMSTAlgorithm {
 
 constexpr static inline int64_t COST_MAX = std::numeric_limits<int64_t>::max();
 
@@ -44,6 +45,11 @@ bool operator==(const Edge& a, const Edge& b) {
 	return (a.From == b.From && a.To == b.To && a.Cost == b.Cost);
 }
 
+std::ostream& operator<<(std::ostream& out, const Edge& edge) {
+	out << "Edge from: " << edge.From << " to: " << edge.To << ", Cost: " << edge.Cost;
+	return out;
+}
+
 
 class Boruvka {
 public:
@@ -54,7 +60,7 @@ public:
 		Workers_(workers),
 		Vertices_(graph.size()),
 		Graph_(graph),
-		chippestEdgeOut(graph.size()),
+		chippestOut(graph.size()),
 		Dsu_(graph.size())
 	{
 		for (size_t u = 0; u < Vertices_; ++u) {
@@ -64,6 +70,7 @@ public:
 				}
 			}
 		}
+		ClearChippestEdgeInfo(0, Vertices_);
 	}
 
 	Boruvka(const vector<Edge>& edges, size_t n, size_t workers) :
@@ -71,17 +78,18 @@ public:
 		Vertices_(n),
 		Graph_(n),
 		Edges_(edges),
-		chippestEdgeOut(n),
+		chippestOut(n),
 		Dsu_(n)
 	{
 		for (const auto& e : Edges_) {
 			Graph_[e.From].emplace_back(e.To, e.Cost);
 			Graph_[e.To].emplace_back(e.From, e.Cost);
 		}
+		ClearChippestEdgeInfo(0, Vertices_);
 	}
 
 
-	int64_t CalcMST_() {
+	int64_t CalcMST() {
 		while (true) {
 			size_t componentsBeforeIteration = Dsu_.GetComponentsQuantity();
 			BoruvkaIteration();
@@ -95,15 +103,19 @@ public:
 		return CostMST_.load();
 	}
 
+	vector<Edge> GetBuiltMST() const {
+		return MST_.copy();
+	}
+
 private:
 
 	void SetMinEdge(const Edge& edge, size_t vertex) {
 		for (;;) {
-			auto currentEdge = chippestEdgeOut[vertex].load();
-			if (currentEdge.Cost < edge.Cost) {
+			auto currentCost = chippestOut[vertex].load();
+			if (currentCost < edge.Cost) {
 				break;
 			}
-			if (chippestEdgeOut[vertex].compare_exchange_weak(currentEdge, edge)) {
+			if (chippestOut[vertex].compare_exchange_weak(currentCost, edge.Cost)) {
 				break;
 			}
 			std::this_thread::yield();
@@ -128,11 +140,11 @@ private:
 
 	void MergeComponents(size_t l, size_t r) {
 		for (size_t i = l; i < r; ++i) {
-			if (chippestEdgeOut[Edges_[i].From].load() == Edges_[i]) {
+			if (chippestOut[Edges_[i].From].load() == Edges_[i].Cost) {
 				Unite(Edges_[i]);
 				continue;
 			}
-			if (chippestEdgeOut[Edges_[i].To].load() == Edges_[i]) {
+			if (chippestOut[Edges_[i].To].load() == Edges_[i].Cost) {
 				Unite(Edges_[i]);
 			}
 		}
@@ -140,7 +152,7 @@ private:
 
 	void ClearChippestEdgeInfo(size_t l, size_t r) {
 		for (size_t i = l; i < r; ++i) {
-			chippestEdgeOut[i].store(Edge(0, 0, COST_MAX));
+			chippestOut[i].store(COST_MAX);
 		}
 	}
 
@@ -181,7 +193,7 @@ private:
 	size_t Vertices_ = 0;
 	vector<vector<pair<size_t, int64_t>>> Graph_;
 	vector<Edge> Edges_;
-	vector<atomic<Edge>> chippestEdgeOut;
+	vector<atomic<int64_t>> chippestOut;
 	ThreadSafeVector<Edge> MST_;
 	ParallelDsu Dsu_;
 	std::atomic<int64_t> CostMST_ = 0;
@@ -189,7 +201,24 @@ private:
 
 }; // namespace BoruvkaMSTAlgorithm
 
-int main() {
 
+void ManualTest() {
+	using namespace std;
+	using namespace BoruvkaMSTAlgorithm;
+	const vector<Edge> testEdges = {Edge(0, 1, 1), Edge(1, 2, 1), Edge(2, 3, 1)};
+	Boruvka solveForSimpleGraph(testEdges, 4, 1);
+	auto cost = solveForSimpleGraph.CalcMST();
+	cout << "Cost: " << cost << endl;
+	auto mst = solveForSimpleGraph.GetBuiltMST();
+	cout << "Found MST:\n";
+	for (auto edge : mst) {
+		cout << edge << '\n';
+	}
+}
+
+int main(int /*argc*/, const char* argv[]) {
+	if (argv[1] == std::string("-m")) { // manual mode
+		ManualTest();
+	}
 	return 0;
 }

@@ -30,6 +30,11 @@ class ThreadSafeVector {
     vector_.push_back(value);
   }
 
+  std::vector<T> copy() const {
+    std::unique_lock rwlocker(block_);
+    return vector_;
+  }
+
  private:
   mutable std::shared_mutex block_;
   std::mutex write_block_;
