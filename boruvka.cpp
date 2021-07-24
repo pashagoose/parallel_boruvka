@@ -16,8 +16,12 @@ using std::vector;
 using std::pair;
 using std::thread;
 
+namespace BoruvkaMSTAlgorithm {
+
+constexpr static inline int64_t COST_MAX = std::numeric_limits<int64_t>::max();
+
 struct Edge {
-	Edge() = delete;
+	Edge() = default;
 
 	Edge(const Edge& other) = default;
 
@@ -27,9 +31,9 @@ struct Edge {
 		Cost(cost)
 	{}
 
-	size_t From;
-	size_t To;
-	int64_t Cost;
+	size_t From = 0;
+	size_t To = 0;
+	int64_t Cost = COST_MAX;
 
 	bool operator<(const Edge& other) const {
 		return Cost < other.Cost;
@@ -43,7 +47,6 @@ bool operator==(const Edge& a, const Edge& b) {
 
 class Boruvka {
 public:
-	constexpr static inline int64_t COST_MAX = std::numeric_limits<int64_t>::max();
 
 	Boruvka() = default;
 
@@ -51,6 +54,7 @@ public:
 		Workers_(workers),
 		Vertices_(graph.size()),
 		Graph_(graph),
+		chippestEdgeOut(graph.size()),
 		Dsu_(graph.size())
 	{
 		for (size_t u = 0; u < Vertices_; ++u) {
@@ -67,7 +71,7 @@ public:
 		Vertices_(n),
 		Graph_(n),
 		Edges_(edges),
-		chippestEdgeOut(n, Edge(0, 0, COST_MAX)),
+		chippestEdgeOut(n),
 		Dsu_(n)
 	{
 		for (const auto& e : Edges_) {
@@ -159,7 +163,7 @@ private:
 		size_t blockLenVertices = (Vertices_ + Workers_ - 1) / Workers_;
 		for (size_t i = 0; i < Workers_; ++i) {
 			threads.emplace_back(
-				&Boruvka::DoWork,
+				&BoruvkaMSTAlgorithm::Boruvka::DoWork,
 				this,
 			 	i * blockLenEdges,
 			 	std::min((i + 1) * blockLenEdges, Edges_.size()),
@@ -181,7 +185,9 @@ private:
 	ThreadSafeVector<Edge> MST_;
 	ParallelDsu Dsu_;
 	std::atomic<int64_t> CostMST_ = 0;
-};
+}; // class Boruvka
+
+}; // namespace BoruvkaMSTAlgorithm
 
 int main() {
 
