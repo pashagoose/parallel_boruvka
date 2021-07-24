@@ -1,20 +1,25 @@
+#include <atomic>
 #include <cstdint>
+#include <functional>
 #include <iostream>
-#include <latch>
-#include <mutex>
+#include <mutex>  
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "thread_safe_vector.h"
+#include "latch.h"
 #include "parallel_dsu.h"
+#include "thread_safe_vector.h"
 
+using std::atomic;
 using std::vector;
 using std::pair;
 using std::thread;
 
 struct Edge {
 	Edge() = delete;
+
+	Edge(const Edge& other) = default;
 
 	Edge(size_t from, size_t to, int64_t cost) :
 		From(from),
@@ -31,102 +36,151 @@ struct Edge {
 	}
 };
 
+bool operator==(const Edge& a, const Edge& b) {
+	return (a.From == b.From && a.To == b.To && a.Cost == b.Cost);
+}
+
 
 class Boruvka {
 public:
+	constexpr static inline int64_t COST_MAX = std::numeric_limits<int64_t>::max();
 
 	Boruvka() = default;
 
 	Boruvka(const vector<vector<pair<size_t, int64_t>>> graph, size_t workers) :
-		Workers(workers),
-		Vertices(graph.size()),
-		Graph(graph),
-		Dsu(graph.size())
+		Workers_(workers),
+		Vertices_(graph.size()),
+		Graph_(graph),
+		Dsu_(graph.size())
 	{
-		for (size_t u = 0; u < Vertices; ++u) {
-			for (auto [v, cost] : Graph[u]) {
+		for (size_t u = 0; u < Vertices_; ++u) {
+			for (auto [v, cost] : Graph_[u]) {
 				if (v > u) {
-					Edges.emplace_back(u, v, cost);
+					Edges_.emplace_back(u, v, cost);
 				}
 			}
 		}
 	}
 
 	Boruvka(const vector<Edge>& edges, size_t n, size_t workers) :
-		Workers(workers),
-		Vertices(n),
-		Graph(n),
-		Edges(edges),
-		Dsu(n)
+		Workers_(workers),
+		Vertices_(n),
+		Graph_(n),
+		Edges_(edges),
+		chippestEdgeOut(n, Edge(0, 0, COST_MAX)),
+		Dsu_(n)
 	{
-		for (const auto& e : Edges) {
-			Graph[e.From].emplace_back(e.To, e.Cost);
-			Graph[e.To].emplace_back(e.From, e.Cost);
+		for (const auto& e : Edges_) {
+			Graph_[e.From].emplace_back(e.To, e.Cost);
+			Graph_[e.To].emplace_back(e.From, e.Cost);
 		}
 	}
 
 
-	int64_t CalcMST() {
+	int64_t CalcMST_() {
 		while (true) {
-			size_t componentsBeforeIteration = Dsu.GetComponentsQuantity();
+			size_t componentsBeforeIteration = Dsu_.GetComponentsQuantity();
 			BoruvkaIteration();
-			size_t componentsAfterIteration = Dsu.GetComponentsQuantity();
+			size_t componentsAfterIteration = Dsu_.GetComponentsQuantity();
 
 			if (componentsAfterIteration == componentsBeforeIteration) {
-				// can not adjust MST
+				// can not adjust MST_
 				break;
 			}
 		}
-		return CostMST.load();
+		return CostMST_.load();
 	}
 
 private:
 
-	Edge FindChippestEdge(size_t l, size_t r) {
-		Edge bestEdge(0, 0, std::numeric_limits<int64_t>::max());
-		for (size_t i = l; i < r; ++i) {
-			if (!Dsu.SameComponents(Edges[i].From, Edges[i].To) && Edges[i] < bestEdge) {
-				bestEdge = Edges[i];
+	void SetMinEdge(const Edge& edge, size_t vertex) {
+		for (;;) {
+			auto currentEdge = chippestEdgeOut[vertex].load();
+			if (currentEdge.Cost < edge.Cost) {
+				break;
 			}
-		}	
-		return bestEdge;
+			if (chippestEdgeOut[vertex].compare_exchange_weak(currentEdge, edge)) {
+				break;
+			}
+			std::this_thread::yield();
+		}
 	}
 
-	void DoWork(size_t l, size_t r, std::latch& synchronize_unite) {
-		bestEdge = FindChippestEdge(l, r);
-		synchronize_unite.arrive_and_wait();
-		if (Dsu.Unite(bestEdge.From, bestEdge.To)) {
-			CostMST.fetch_add(bestEdge.Cost);
-			MST.PushBack(bestEdge);
+	void FindChippestEdges(size_t l, size_t r) {
+		for (size_t i = l; i < r; ++i) {
+			if (!Dsu_.SameComponent(Edges_[i].From, Edges_[i].To)) {
+				SetMinEdge(Edges_[i], Edges_[i].From);
+				SetMinEdge(Edges_[i], Edges_[i].To);
+			}
 		}
+	}
+
+	void Unite(const Edge& edge) {
+		if (Dsu_.Unite(edge.From, edge.To)) {
+			CostMST_.fetch_add(edge.Cost);
+			MST_.PushBack(edge);
+		}
+	}
+
+	void MergeComponents(size_t l, size_t r) {
+		for (size_t i = l; i < r; ++i) {
+			if (chippestEdgeOut[Edges_[i].From].load() == Edges_[i]) {
+				Unite(Edges_[i]);
+				continue;
+			}
+			if (chippestEdgeOut[Edges_[i].To].load() == Edges_[i]) {
+				Unite(Edges_[i]);
+			}
+		}
+	}
+
+	void ClearChippestEdgeInfo(size_t l, size_t r) {
+		for (size_t i = l; i < r; ++i) {
+			chippestEdgeOut[i].store(Edge(0, 0, COST_MAX));
+		}
+	}
+
+	void DoWork(size_t lEdges, 
+		size_t rEdges, 
+		size_t lVertices, 
+		size_t rVertices, 
+		Latch& synchronize_unite) 
+	{
+		FindChippestEdges(lEdges, rEdges);
+		synchronize_unite.ArriveAndWait();
+		MergeComponents(lEdges, rEdges);
+		ClearChippestEdgeInfo(lVertices, rVertices);
 	}
 
 	void BoruvkaIteration() {
 		vector<thread> threads;
-		std::latch synchronize_unite(Workers);
-		size_t blockLen = (Edges.size() + Workers - 1) / Workers;
-		for (size_t i = 0; i < Workers; ++i) {
+		Latch synchronize_unite(Workers_);
+		size_t blockLenEdges = (Edges_.size() + Workers_ - 1) / Workers_;
+		size_t blockLenVertices = (Vertices_ + Workers_ - 1) / Workers_;
+		for (size_t i = 0; i < Workers_; ++i) {
 			threads.emplace_back(
-				DoWork,
-			 	i * blockLen,
-			 	min((i + 1) * blockLen, Edges.size()),
-			  	std::rref(synchronize_unite)
-			 );
+				&Boruvka::DoWork,
+				this,
+			 	i * blockLenEdges,
+			 	std::min((i + 1) * blockLenEdges, Edges_.size()),
+			 	i * blockLenVertices,
+			 	std::min((i + 1) * blockLenVertices, Vertices_),
+			  	std::ref(synchronize_unite)
+			);
 		}
 		for (auto& thread : threads) {
 			thread.join();
 		}
 	}
 
-	size_t Workers = 1;
-	size_t Vertices = 0;
-	vector<vector<pair<size_t, int64_t>>> Graph;
-	vector<Edge> Edges;
-	// TODO: replace thread_safe_vector with mpmc_queue, should be a bit faster 
-	// (it is majorized by finding chippest edges)
-	ThreadSafeVector<Edge> MST;
-	ParallelDsu Dsu;
-	std::atomic<int64_t> CostMST = 0;
+	size_t Workers_ = 1;
+	size_t Vertices_ = 0;
+	vector<vector<pair<size_t, int64_t>>> Graph_;
+	vector<Edge> Edges_;
+	vector<atomic<Edge>> chippestEdgeOut;
+	ThreadSafeVector<Edge> MST_;
+	ParallelDsu Dsu_;
+	std::atomic<int64_t> CostMST_ = 0;
 };
 
 int main() {

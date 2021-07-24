@@ -12,40 +12,40 @@ using std::vector;
 class ParallelDsu {
 public:
 	ParallelDsu(size_t n = 0) : 
-		InitialComponents(n),
-		CurrentComponents(n),
-		Parent(n)
+		InitialComponents_(n),
+		CurrentComponents_(n),
+		Parent_(n)
 	{
 		this->ToIdPermutation(n);
 	}
 
 	size_t FindLeader(size_t v) {
-		auto currentParent = Parent[v].load();
-		if (currentParent == v) {
+		auto currentParent_ = Parent_[v].load();
+		if (currentParent_ == v) {
 			return v;
 		}
 		auto res = FindLeader(v);
-		Parent[v].store(res);
+		Parent_[v].store(res);
 		return res;
 	}
 
 	bool Unite(size_t u, size_t v) {
-		size_t uParent = FindLeader(u);
-		size_t vParent = FindLeader(v);
-		if (uParent == vParent) {
+		size_t uParent_ = FindLeader(u);
+		size_t vParent_ = FindLeader(v);
+		if (uParent_ == vParent_) {
 			return false;
 		}
 
 		for (;;) {
-			if (Parent[uParent].compare_exchange_weak(uParent, vParent)) {
-				if (uParent != vParent) {
-					CurrentComponents.fetch_sub(1);
+			if (Parent_[uParent_].compare_exchange_weak(uParent_, vParent_)) {
+				if (uParent_ != vParent_) {
+					CurrentComponents_.fetch_sub(1);
 					return true;
 				}
 				return false;
 			}
 			std::this_thread::yield();
-			uParent = FindLeader(uParent);
+			uParent_ = FindLeader(uParent_);
 		}	
 	}
 
@@ -57,19 +57,19 @@ public:
 	}
 
 	size_t GetComponentsQuantity() const {
-		return CurrentComponents.load();
+		return CurrentComponents_.load();
 	}
 
 private:
-	size_t InitialComponents = 0;
-	std::atomic<size_t> CurrentComponents = 0;
-	vector<std::atomic<size_t>> Parent;
+	size_t InitialComponents_ = 0;
+	std::atomic<size_t> CurrentComponents_{0};
+	vector<std::atomic<size_t>> Parent_;
 
 	void ToIdPermutation(size_t n) {
-		InitialComponents = n;
-		CurrentComponents.store(n);
-		for (size_t i = 0; i < InitialComponents; ++i) {
-			Parent[i].store(i);
+		InitialComponents_ = n;
+		CurrentComponents_.store(n);
+		for (size_t i = 0; i < InitialComponents_; ++i) {
+			Parent_[i].store(i);
 		}
 	}
 };
