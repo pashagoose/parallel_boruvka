@@ -81,6 +81,7 @@ private:
 
 	void BoruvkaIteration();
 
+
 	size_t Workers_ = 1;
 	size_t Vertices_ = 0;
 	vector<vector<pair<size_t, int64_t>>> Graph_;

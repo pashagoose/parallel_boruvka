@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 
 # set the project name
-project(is_prime)
+project(boruvka)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

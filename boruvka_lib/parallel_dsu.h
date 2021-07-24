@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <thread>
 #include <vector>
 
 // Lock-Free DSU
@@ -13,7 +14,7 @@ using std::vector;
 
 class ParallelDsu {
 public:
-	ParallelDsu(size_t n = 0);
+	ParallelDsu(size_t n);
 
 	size_t FindLeader(size_t v);
 
