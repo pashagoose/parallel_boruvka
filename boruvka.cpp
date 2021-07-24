@@ -56,29 +56,13 @@ public:
 
 	Boruvka() = default;
 
-	Boruvka(const vector<vector<pair<size_t, int64_t>>> graph, size_t workers) :
-		Workers_(workers),
-		Vertices_(graph.size()),
-		Graph_(graph),
-		chippestOut(graph.size()),
-		Dsu_(graph.size())
-	{
-		for (size_t u = 0; u < Vertices_; ++u) {
-			for (auto [v, cost] : Graph_[u]) {
-				if (v > u) {
-					Edges_.emplace_back(u, v, cost);
-				}
-			}
-		}
-		ClearChippestEdgeInfo(0, Vertices_);
-	}
 
 	Boruvka(const vector<Edge>& edges, size_t n, size_t workers) :
 		Workers_(workers),
 		Vertices_(n),
 		Graph_(n),
 		Edges_(edges),
-		chippestOut(n),
+		chippestEdgeOut(n),
 		Dsu_(n)
 	{
 		for (const auto& e : Edges_) {
@@ -109,13 +93,13 @@ public:
 
 private:
 
-	void SetMinEdge(const Edge& edge, size_t vertex) {
+	void SetMinEdge(size_t index, size_t vertex) {
 		for (;;) {
-			auto currentCost = chippestOut[vertex].load();
-			if (currentCost < edge.Cost) {
+			auto currentMinEdgeId = chippestEdgeOut[vertex].load();
+			if (currentMinEdgeId != Edges_.size() && Edges_[currentMinEdgeId] < Edges_[index]) {
 				break;
 			}
-			if (chippestOut[vertex].compare_exchange_weak(currentCost, edge.Cost)) {
+			if (chippestEdgeOut[vertex].compare_exchange_weak(currentMinEdgeId, index)) {
 				break;
 			}
 			std::this_thread::yield();
@@ -125,8 +109,8 @@ private:
 	void FindChippestEdges(size_t l, size_t r) {
 		for (size_t i = l; i < r; ++i) {
 			if (!Dsu_.SameComponent(Edges_[i].From, Edges_[i].To)) {
-				SetMinEdge(Edges_[i], Edges_[i].From);
-				SetMinEdge(Edges_[i], Edges_[i].To);
+				SetMinEdge(i, Edges_[i].From);
+				SetMinEdge(i, Edges_[i].To);
 			}
 		}
 	}
@@ -140,11 +124,11 @@ private:
 
 	void MergeComponents(size_t l, size_t r) {
 		for (size_t i = l; i < r; ++i) {
-			if (chippestOut[Edges_[i].From].load() == Edges_[i].Cost) {
+			if (chippestEdgeOut[Edges_[i].From].load() == i) {
 				Unite(Edges_[i]);
 				continue;
 			}
-			if (chippestOut[Edges_[i].To].load() == Edges_[i].Cost) {
+			if (chippestEdgeOut[Edges_[i].To].load() == i) {
 				Unite(Edges_[i]);
 			}
 		}
@@ -152,7 +136,7 @@ private:
 
 	void ClearChippestEdgeInfo(size_t l, size_t r) {
 		for (size_t i = l; i < r; ++i) {
-			chippestOut[i].store(COST_MAX);
+			chippestEdgeOut[i].store(Edges_.size());
 		}
 	}
 
@@ -193,9 +177,9 @@ private:
 	size_t Vertices_ = 0;
 	vector<vector<pair<size_t, int64_t>>> Graph_;
 	vector<Edge> Edges_;
-	vector<atomic<int64_t>> chippestOut;
+	vector<atomic<size_t>> chippestEdgeOut;
 	ThreadSafeVector<Edge> MST_;
-	ParallelDsu Dsu_;
+	ParallelDsu Dsu_;  
 	std::atomic<int64_t> CostMST_ = 0;
 }; // class Boruvka
 
@@ -205,8 +189,8 @@ private:
 void ManualTest() {
 	using namespace std;
 	using namespace BoruvkaMSTAlgorithm;
-	const vector<Edge> testEdges = {Edge(0, 1, 1), Edge(1, 2, 1), Edge(2, 3, 1)};
-	Boruvka solveForSimpleGraph(testEdges, 4, 1);
+	const vector<Edge> testEdges = {Edge(0, 1, 3), Edge(0, 1, 1), Edge(0, 1, 2)};
+	Boruvka solveForSimpleGraph(testEdges, 4, 10);
 	auto cost = solveForSimpleGraph.CalcMST();
 	cout << "Cost: " << cost << endl;
 	auto mst = solveForSimpleGraph.GetBuiltMST();
