@@ -56,20 +56,19 @@ public:
 
 	Boruvka(const vector<Edge>& edges, size_t n, size_t workers);
 
-
 	int64_t CalcMST();
 
 	vector<Edge> GetBuiltMST() const;
 
 private:
 
-	void SetMinEdge(size_t index, size_t vertex);
+	bool SetMinEdge(size_t index, size_t vertex);
 
-	void FindChippestEdges(size_t l, size_t r);
+	void UpdateChippestEdges(size_t l, size_t r);
 
 	void Unite(const Edge& edge);
 
-	void MergeComponents(size_t l, size_t r);
+	void FindGoodEdges(size_t l, size_t r, vector<size_t>& goodEdges);
 
 	void ClearChippestEdgeInfo(size_t l, size_t r);
 
@@ -77,7 +76,8 @@ private:
 		size_t rEdges, 
 		size_t lVertices, 
 		size_t rVertices, 
-		Latch& synchronize_unite);
+		Latch& synchronize_unite,
+		Latch& synchronize_cleaning);
 
 	void BoruvkaIteration();
 

@@ -47,24 +47,23 @@ vector<Edge> Boruvka::GetBuiltMST() const {
 }
 
 
-void Boruvka::SetMinEdge(size_t index, size_t vertex) {
+bool Boruvka::SetMinEdge(size_t index, size_t vertex) {
 	for (;;) {
 		auto currentMinEdgeId = chippestEdgeOut[vertex].load();
 		if (currentMinEdgeId != Edges_.size() && Edges_[currentMinEdgeId] < Edges_[index]) {
-			break;
+			return false;
 		}
 		if (chippestEdgeOut[vertex].compare_exchange_weak(currentMinEdgeId, index)) {
-			break;
+			return true;
 		}
-		std::this_thread::yield();
 	}
 }
 
-void Boruvka::FindChippestEdges(size_t l, size_t r) {
+void Boruvka::UpdateChippestEdges(size_t l, size_t r) {
 	for (size_t i = l; i < r; ++i) {
 		if (!Dsu_.SameComponent(Edges_[i].From, Edges_[i].To)) {
-			SetMinEdge(i, Edges_[i].From);
-			SetMinEdge(i, Edges_[i].To);
+			SetMinEdge(i, Dsu_.FindLeader(Edges_[i].From));
+			SetMinEdge(i, Dsu_.FindLeader(Edges_[i].To));
 		}
 	}
 }
@@ -76,14 +75,16 @@ void Boruvka::Unite(const Edge& edge) {
 	}
 }
 
-void Boruvka::MergeComponents(size_t l, size_t r) {
+void Boruvka::FindGoodEdges(size_t l, size_t r, vector<size_t>& goodEdges) {
 	for (size_t i = l; i < r; ++i) {
-		if (chippestEdgeOut[Edges_[i].From].load() == i) {
-			Unite(Edges_[i]);
+		size_t fromParent = Dsu_.FindLeader(Edges_[i].From);
+		size_t toParent = Dsu_.FindLeader(Edges_[i].To);
+		if (chippestEdgeOut[fromParent].load() == i) {
+			goodEdges.push_back(i);
 			continue;
 		}
-		if (chippestEdgeOut[Edges_[i].To].load() == i) {
-			Unite(Edges_[i]);
+		if (chippestEdgeOut[toParent].load() == i) {
+			goodEdges.push_back(i);
 		}
 	}
 }
@@ -98,17 +99,30 @@ void Boruvka::DoWork(size_t lEdges,
 	size_t rEdges, 
 	size_t lVertices, 
 	size_t rVertices, 
-	Latch& synchronize_unite) 
+	Latch& synchronize_unite,
+	Latch& synchronize_cleaning) 
 {
-	FindChippestEdges(lEdges, rEdges);
+	UpdateChippestEdges(lEdges, rEdges);
 	synchronize_unite.ArriveAndWait();
-	MergeComponents(lEdges, rEdges);
+
+	vector<size_t> goodEdges;
+	FindGoodEdges(lEdges, rEdges, goodEdges);
+	synchronize_cleaning.ArriveAndWait();
+
+	// merge components
+	while (!goodEdges.empty()) {
+		Unite(Edges_[goodEdges.back()]);
+		goodEdges.pop_back();
+	}
+
+	// clear information about chippest edges from each component
 	ClearChippestEdgeInfo(lVertices, rVertices);
 }
 
 void Boruvka::BoruvkaIteration() {
 	vector<thread> threads;
 	Latch synchronize_unite(Workers_);
+	Latch synchronize_cleaning(Workers_);
 	size_t blockLenEdges = (Edges_.size() + Workers_ - 1) / Workers_;
 	size_t blockLenVertices = (Vertices_ + Workers_ - 1) / Workers_;
 	for (size_t i = 0; i < Workers_; ++i) {
@@ -119,7 +133,8 @@ void Boruvka::BoruvkaIteration() {
 		 	std::min((i + 1) * blockLenEdges, Edges_.size()),
 		 	i * blockLenVertices,
 		 	std::min((i + 1) * blockLenVertices, Vertices_),
-		  	std::ref(synchronize_unite)
+		  	std::ref(synchronize_unite),
+		  	std::ref(synchronize_cleaning)
 		);
 	}
 	for (auto& thread : threads) {

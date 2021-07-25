@@ -13,33 +13,31 @@ ParallelDsu::ParallelDsu(size_t n = 0) :
 }
 
 size_t ParallelDsu::FindLeader(size_t v) {
-	auto currentParent = Parent_[v].load();
-	if (currentParent == v) {
-		return v;
-	}
-	auto res = FindLeader(currentParent);
-	Parent_[v].store(res);
-	return res;
+	while (v != Parent_[v].load()) {
+        uint64_t papa = Parent_[v].load();
+        uint64_t grandPapa = Parent_[papa].load();
+        Parent_[v].compare_exchange_weak(papa, grandPapa);
+        v = grandPapa;
+    }
+    return v;
 }
 
 bool ParallelDsu::Unite(size_t u, size_t v) {
-	size_t uParent_ = FindLeader(u);
-	size_t vParent_ = FindLeader(v);
-	if (uParent_ == vParent_) {
-		return false;
-	}
-
 	for (;;) {
-		if (Parent_[uParent_].compare_exchange_weak(uParent_, vParent_)) {
-			if (uParent_ != vParent_) {
-				CurrentComponents_.fetch_sub(1);
-				return true;
-			}
+		size_t uParent = FindLeader(u);
+		size_t vParent = FindLeader(v);
+		if (uParent == vParent) {
 			return false;
 		}
-		std::this_thread::yield();
-		uParent_ = FindLeader(uParent_);
-	}	
+		if (!Parent_[uParent].compare_exchange_weak(uParent, vParent)) {
+			continue;
+		}
+		if (uParent != vParent) {
+			CurrentComponents_.fetch_sub(1);
+			return true;
+		}
+		return false;
+	}
 }
 
 bool ParallelDsu::SameComponent(size_t u, size_t v) {
