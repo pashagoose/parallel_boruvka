@@ -119,6 +119,7 @@ TEST(BoruvkaCorrectness, SparseGraphMultipleWorkers) {
 	}
 }
 
+
 TEST(BoruvkaCorrectness, DenseGraphMultipleWorkers) {
 	constexpr size_t Repetitions = 10;
 	constexpr size_t Workers = 8;
