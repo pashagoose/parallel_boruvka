@@ -28,4 +28,5 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 add_subdirectory(boruvka_lib)
 add_subdirectory(tests)
 add_subdirectory(benchmarks)
+add_subdirectory(random_graphs_lib)
 
