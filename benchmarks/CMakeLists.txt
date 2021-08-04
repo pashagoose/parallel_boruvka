@@ -18,7 +18,7 @@ foreach(BENCH_SOURCE ${BENCH_SOURCES})
     set(BENCH_TARGET "${BENCH_NAME}")
 
     add_executable(${BENCH_TARGET} ${BENCH_SOURCE})
-    target_link_libraries(${BENCH_TARGET} benchmark is_prime_lib)
+    target_link_libraries(${BENCH_TARGET} benchmark boruvka_lib random_graphs_lib)
 
     list(APPEND ALL_BENCHES ${BENCH_TARGET})
 endforeach()

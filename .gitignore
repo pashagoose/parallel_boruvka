@@ -1,4 +1,6 @@
 build
+asan_build
+tsan_build
 .cache
 
 # Prerequisites
