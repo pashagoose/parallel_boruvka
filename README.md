@@ -13,13 +13,13 @@ $ make
 ```
 
 ## Run tests
-Из директории `build`:
+From directory `build`:
 ```
 $ ./test/bin/all_tests
 ```
 
 ## Run benchmarks
-Из директории `build`:
+From directory`build`:
 ```
 $ ./benchmarks/bin/boruvka_benchmark
 ```
