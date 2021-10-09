@@ -1,9 +1,9 @@
 # Parallel Boruvka
 
-Параллельная версия алгоритма Борувки. На 10% быстрее на 4 ядрах :D В бенчмарках замерялось время сразу на 10 графах: 8 разреженных и 2 плотных (можно глянуть в коде).
+Parallel version of Boruvka's algorithm for finding MST. Spead up original algorithm by 10% using 4 physical threads. Benchmarks were measured on 8 sparse graphs and 2 tense ones.
 
-# Сборка проекта и запуск тестов
-## Сборка Debug (Release)
+# Build project and run tests.
+## Build Debug (Release)
 ```
 $ cd parallel_boruvka
 $ mkdir build
@@ -12,13 +12,13 @@ $ cmake [-DCMAKE_BUILD_TYPE=Release] ..
 $ make
 ```
 
-## Запуск тестов
+## Run tests
 Из директории `build`:
 ```
 $ ./test/bin/all_tests
 ```
 
-## Запуск бенчмарков
+## Run benchmarks
 Из директории `build`:
 ```
 $ ./benchmarks/bin/boruvka_benchmark
